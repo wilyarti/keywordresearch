@@ -19,6 +19,7 @@ class App extends Component {
     constructor(props) {
         super(props);
         this.state = {
+            timeout: 1000, //millisecond delay
             keyword: "",
             loading: false,
             keywords: [],
@@ -37,13 +38,12 @@ class App extends Component {
         this.setToast = this.setToast.bind(this);
         this.getTrend = this.getTrend.bind(this);
         this.getTrends = this.getTrends.bind(this);
+        this.setToast = this.setToast.bind(this);
     }
 
     closeToast(index) {
         let msgs = this.state.msgs;
         delete (msgs[index]);
-        console.log(msgs);
-        console.log(index);
         this.setState({msgs});
     }
 
@@ -92,7 +92,7 @@ class App extends Component {
     }
 
     getTrend(e) {
-        const keyword = e.currentTarget.dataset.id ;
+        const keyword = e.currentTarget.dataset.id;
         console.log(keyword);
         const getTrends = (thisKeyword) => {
             return new Promise((resolve, reject) => {
@@ -140,20 +140,20 @@ class App extends Component {
             config.datasets[config.datasets.length] = dataset;
             this.setState({config})
         }).catch((error) => {
-            console.log(error);
             if (typeof error.err === "undefined") {
                 let noResults = this.state.keywords.indexOf(keyword);
-                let keywords = this.state.keywords;
-                this.state.keywords[noResults] = this.state.keywords[noResults] + " no results";
-                this.setState(keywords)
+                let abcKeywords = this.state.abcKeywords;
+                this.state.abcKeywords[noResults] = this.state.abcKeywords[noResults] + " no results";
+                this.setState(abcKeywords)
             } else {
-                console.log("Error rate limited");
+                this.setToast("Error", `Rate limited ${keyword}.`);
             }
         });
         console.log(this.state);
     }
+
     getTrends() {
-       const keywords =this.state.abcKeywords;
+        const keywords = this.state.keywords;
         const getTrends = (thisKeyword) => {
             return new Promise((resolve, reject) => {
                 fetch('/keyword/trends',
@@ -176,40 +176,41 @@ class App extends Component {
             });
         };
         keywords.map((_, index) => {
-            getTrends(keywords[index]).then(trends => {
-                let keyword = keywords[index];
-                console.log(keyword);
-                let dataset = {
-                    label: keyword,
-                    fill: true,
-                    lineTension: 0,
-                    pointRadius: 3,
-                    borderColor: getRandomColor(),
-                    borderWidth: 1.5,
-                    data: [],
-                };
-                if (typeof trends.default.timelineData.length === "undefined") {
-                    return
-                }
-                for (let i = 0, len = trends.default.timelineData.length; i < len; i++) {
-                    dataset.data.push({
-                        x: moment(trends.default.timelineData[i].formattedAxisTime, "MMM D hh:mm p"), // "Nov 2 at 10:48 PM"
-                        y: parseFloat(trends.default.timelineData[i].value[0])
-                    });
-                }
-                let config = this.state.config;
-                config.datasets[config.datasets.length] = dataset;
-                this.setState({config})
-            }).catch((error) => {
-                if (typeof error.err === "undefined") {
-                    let noResults = this.state.keywords.indexOf(keywords[index]);
-                    let abcKeywords = this.state.abcKeywords;
-                    this.state.abcKeywords[noResults] = this.state.abcKeywords[noResults] + " no results";
-                    this.setState(abcKeywords)
-                } else {
-                    console.log("Rate limited");
-                }
-            });
+            setTimeout(function () {
+                getTrends(keywords[index]).then(trends => {
+                    let keyword = keywords[index];
+                    let dataset = {
+                        label: keyword,
+                        fill: true,
+                        lineTension: 0,
+                        pointRadius: 3,
+                        borderColor: getRandomColor(),
+                        borderWidth: 1.5,
+                        data: [],
+                    };
+                    if (typeof trends.default.timelineData.length === "undefined") {
+                        return
+                    }
+                    for (let i = 0, len = trends.default.timelineData.length; i < len; i++) {
+                        dataset.data.push({
+                            x: moment(trends.default.timelineData[i].formattedAxisTime, "MMM D hh:mm p"), // "Nov 2 at 10:48 PM"
+                            y: parseFloat(trends.default.timelineData[i].value[0])
+                        });
+                    }
+                    let config = this.state.config;
+                    config.datasets[config.datasets.length] = dataset;
+                    this.setState({config})
+                }).catch((error) => {
+                    if (typeof error.err === "undefined") {
+                        let noResults = this.state.keywords.indexOf(keywords[index]);
+                        let abcKeywords = this.state.abcKeywords;
+                        this.state.abcKeywords[noResults] = this.state.abcKeywords[noResults] + " no results";
+                        this.setState(abcKeywords)
+                    } else {
+                        this.setToast("Error", `Rate limited ${keywords[index]}`);
+                    }
+                });
+            }.bind(this), (this.state.timeout  * index))
         });
     }
 
@@ -288,26 +289,6 @@ class App extends Component {
                 }}>
                     {msgList}
                 </div>
-                Begin typing keyword. The results will automatically be fetched.
-                <p/>
-                <Form>
-                    <Form.Group as={Col} md="4" controlId="keyword">
-                        <Form.Label>Keyword Search</Form.Label>
-                        <Form.Control name="keyword" value={this.state.keyword}
-                                      onChange={this.handleKeyword}
-                                      placeholder="Emerald QLD"/>
-                    </Form.Group>
-                    <Button variant="primary" disabled={this.state.loading}
-                            onClick={!this.state.loading ? this.searchButton : null}>
-                        {this.state.loading ? <Spinner
-                            as="span"
-                            animation="grow"
-                            size="sm"
-                            role="status"
-                            aria-hidden="true"
-                        /> : 'Alphabetic Search'}
-                    </Button>
-                </Form>
                 <div>
                     <Line
                         data={this.state.config}
@@ -344,6 +325,27 @@ class App extends Component {
                         }}
                     />
                 </div>
+                Begin typing keyword. The results will automatically be fetched.
+                <p/>
+                <Form>
+                    <Form.Group as={Col} md="4" controlId="keyword">
+                        <Form.Label>Keyword Search</Form.Label>
+                        <Form.Control name="keyword" value={this.state.keyword}
+                                      onChange={this.handleKeyword}
+                                      placeholder="Emerald QLD"/>
+                    </Form.Group>
+                    <Button variant="primary" disabled={this.state.loading}
+                            onClick={!this.state.loading ? this.searchButton : null}>
+                        {this.state.loading ? <Spinner
+                            as="span"
+                            animation="grow"
+                            size="sm"
+                            role="status"
+                            aria-hidden="true"
+                        /> : 'Alphabetic Search'}
+                    </Button>
+                </Form>
+
                 <br/>
                 {this.state.keywords.length > 0 && <div><h3>Keyword Suggestions</h3>
                     <ul>{keywordList}</ul>
