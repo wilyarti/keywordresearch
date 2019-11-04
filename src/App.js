@@ -13,6 +13,7 @@ import {Line} from 'react-chartjs-2';
 import './App.css';
 
 const suggest = require('suggestion');
+const distinctColors = require('distinct-colors')
 
 
 class App extends Component {
@@ -27,10 +28,11 @@ class App extends Component {
             msg: '',
             msgs: [],
             config: {
-                type: 'line',
+                type: 'bar',
                 maintainAspectRatio: false,
                 datasets: []
             },
+            pallete: distinctColors({count: 24})
         };
         this.handleKeyword = this.handleKeyword.bind(this);
         this.searchButton = this.searchButton.bind(this);
@@ -123,7 +125,7 @@ class App extends Component {
                 fill: true,
                 lineTension: 0,
                 pointRadius: 3,
-                borderColor: getRandomColor(),
+                borderColor: distinctColors()[0].hex(),
                 borderWidth: 1.5,
                 data: [],
             };
@@ -132,7 +134,7 @@ class App extends Component {
             }
             for (let i = 0, len = trends.default.timelineData.length; i < len; i++) {
                 dataset.data.push({
-                    x: moment(trends.default.timelineData[i].formattedAxisTime, "MMM D hh:mm p"), // "Nov 2 at 10:48 PM"
+                    x: moment(trends.default.timelineData[i].formattedAxisTime, "MMM DD"), // "Nov 2 at 10:48 PM"
                     y: parseFloat(trends.default.timelineData[i].value[0])
                 });
             }
@@ -175,43 +177,55 @@ class App extends Component {
                     })
             });
         };
-        keywords.map((_, index) => {
+        const palette = distinctColors({count: 24});
+
+        for (let k = 0; k < keywords.length; k += 5) {
             setTimeout(function () {
-                getTrends(keywords[index]).then(trends => {
-                    let keyword = keywords[index];
-                    let dataset = {
-                        label: keyword,
-                        fill: true,
-                        lineTension: 0,
-                        pointRadius: 3,
-                        borderColor: getRandomColor(),
-                        borderWidth: 1.5,
-                        data: [],
-                    };
+                getTrends(keywords.slice(k, k + 5)).then(trends => {
+                    let config = this.state.config;
+                    let datasets = [];
+                    let keywordsState = this.state.keywords;
+                    console.log(distinctColors());
+                    keywords.slice(k, k + 5).map((value, index) => {
+                        let disabledBoolean = trends.default.averages[index]  ? false : true;
+                        let keywordIndex = keywordsState.indexOf(value);
+                        let dataset = {
+                            label: value,
+                            borderColor: palette[keywordIndex].hex(),
+                            data: [],
+                            hidden: disabledBoolean
+                        };
+                        datasets.push(dataset);
+                        console.log(index);
+                        // we will be chunking searches up into lots of 5. so index will be non-linear
+                        keywordsState[keywordIndex] = keywordsState[keywordIndex] + " -> %" + trends.default.averages[index] + " rating"
+                    });
+
+                    console.log(trends);
                     if (typeof trends.default.timelineData.length === "undefined") {
                         return
                     }
                     for (let i = 0, len = trends.default.timelineData.length; i < len; i++) {
-                        dataset.data.push({
-                            x: moment(trends.default.timelineData[i].formattedAxisTime, "MMM D hh:mm p"), // "Nov 2 at 10:48 PM"
-                            y: parseFloat(trends.default.timelineData[i].value[0])
-                        });
+                        for (let j = 0, len = trends.default.timelineData[i].value.length; j < len; j++) {
+                            datasets[j].data.push({
+                                x: moment(trends.default.timelineData[i].formattedAxisTime, "MMM DD" ), // "Nov 2 at 10:48 PM" "MMM D hh:mm p"
+                                y: parseFloat(trends.default.timelineData[i].value[j])
+                            });
+                        }
                     }
-                    let config = this.state.config;
-                    config.datasets[config.datasets.length] = dataset;
+                    for (let m = 0; m < datasets.length; m++) {
+                        config.datasets.push(datasets[m]);
+                    }
                     this.setState({config})
                 }).catch((error) => {
                     if (typeof error.err === "undefined") {
-                        let noResults = this.state.keywords.indexOf(keywords[index]);
-                        let abcKeywords = this.state.abcKeywords;
-                        this.state.abcKeywords[noResults] = this.state.abcKeywords[noResults] + " no results";
-                        this.setState(abcKeywords)
+                        console.log("No results? We shouldn't be here.")
                     } else {
-                        this.setToast("Error", `Rate limited ${keywords[index]}`);
+                        this.setToast("Error", `Rate limited ${keywords[0]}`);
                     }
                 });
-            }.bind(this), (this.state.timeout  * index))
-        });
+            }.bind(this), (this.state.timeout * k))
+        }
     }
 
 
@@ -345,14 +359,17 @@ class App extends Component {
                         /> : 'Alphabetic Search'}
                     </Button>
                 </Form>
-
-                <br/>
                 {this.state.keywords.length > 0 && <div><h3>Keyword Suggestions</h3>
                     <ul>{keywordList}</ul>
                 </div>}
-                {this.state.abcKeywords.length > 0 && <div><h3>ABC Keyword Search</h3>
-                    <ul>{abcKeywordList}</ul>
-                </div>}
+                <details>
+                    <summary><h3>ABC Keyword Search</h3></summary>
+                    {this.state.abcKeywords.length > 0 && <div>
+                        <ul>{abcKeywordList}</ul>
+                    </div>}
+                </details>
+                <br/>
+
             </Container>
         )
     }
