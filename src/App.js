@@ -21,7 +21,7 @@ class App extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            timeout: 100, //millisecond delay
+            timeout: 500, //millisecond delay
             keyword: "",
             loading: false,
             keywords: [],
@@ -34,7 +34,8 @@ class App extends Component {
                 maintainAspectRatio: false,
                 datasets: []
             },
-            pallete: distinctColors({count: 24})
+            palette: distinctColors({count: 56}),
+            errors: 0
         };
         this.handleKeyword = this.handleKeyword.bind(this);
         this.searchButton = this.searchButton.bind(this);
@@ -179,52 +180,59 @@ class App extends Component {
                     })
             });
         };
-        const palette = distinctColors({count: 24});
-
         for (let k = 0; k < keywords.length; k += 5) {
+
             setTimeout(function () {
+                if (this.state.errors > 5) {
+                    console.log("too many errors. aborting");
+                    return;
+                }
                 getTrends(keywords.slice(k, k + 5)).then(trends => {
                     let config = this.state.config;
                     let datasets = [];
                     let keywordsState = this.state.abcKeywords;
                     let abcKeywordsRating = this.state.abcKeywordsRating;
+                    let errors = this.state.errors;
+                    console.log(keywords.slice(k, k + 5));
+                    console.log(trends);
                     keywords.slice(k, k + 5).map((value, index) => {
-                        let disabledBoolean = trends.default.averages[index] ? false : true;
+                        const rating = (trends.default.averages.length != 0) ? trends.default.averages[index] : 0;
                         let keywordIndex = keywordsState.indexOf(value);
-                        if (!disabledBoolean) {
+                        console.log(`${value} had ${rating} ${index}`);
+                        // check for empty data set.
+                        if (rating > 0) {
                             let dataset = {
                                 label: value,
-                                borderColor: palette[keywordIndex].hex(),
+                                borderColor: this.state.palette[this.state.config.datasets.length + index].hex(),
                                 data: [],
-                                hidden: disabledBoolean
                             };
+                            for (let i = 0, len = trends.default.timelineData.length; i < len; i++) {
+                                dataset.data.push({
+                                    x: moment(trends.default.timelineData[i].formattedAxisTime, "MMM DD"), // "Nov 2 at 10:48 PM" "MMM D hh:mm p"
+                                    y: parseInt(trends.default.timelineData[i].value[index])
+                                });
+                            }
                             datasets.push(dataset);
                         }
                         abcKeywordsRating.push({
-                            rating: trends.default.averages[index] ? trends.default.averages[index] : 0,
+                            rating: rating,
                             keyword: value
                         });
                     });
-                    for (let i = 0, len = trends.default.timelineData.length; i < len; i++) {
-                        for (let j = 0, len = trends.default.timelineData[i].value.length; j < len; j++) {
-                            if (trends.default.averages[j] !== 0) {
-                                datasets[j].data.push({
-                                    x: moment(trends.default.timelineData[i].formattedAxisTime, "MMM DD"), // "Nov 2 at 10:48 PM" "MMM D hh:mm p"
-                                    y: parseFloat(trends.default.timelineData[i].value[j])
-                                });
-                            }
-                        }
-                    }
                     for (let m = 0; m < datasets.length; m++) {
                         config.datasets.push(datasets[m]);
                     }
-                    console.log(abcKeywordsRating);
-                    this.setState({config, abcKeywords: keywordsState, abcKeywordsRating})
+                    console.log(config);
+                    errors--;
+                    this.setState({config, abcKeywords: keywordsState, abcKeywordsRating, errors})
                 }).catch((error) => {
                     if (typeof error.err === "undefined") {
-                        console.log("No results? We shouldn't be here.")
+                        console.log("No results? We shouldn't be here.");
+                        console.log(error);
                     } else {
-                        this.setToast("Error", `Rate limited ${keywords[0]}`);
+                        this.setToast("Error", `Rate limited.`);
+                        let errors = this.state.errors + 1;
+                        this.setState({errors});
                     }
                 });
             }.bind(this), (this.state.timeout * (k / 5)))
@@ -277,11 +285,11 @@ class App extends Component {
         const topAbcKeywords = abcKeywordsRating.filter(keyword => keyword.rating > 0);
         const topKeywordList = topAbcKeywords.map((value, index) => {
             return (<p onClick={this.getTrend} data-id={value.keyword}
-                       key={index}>{value.keyword} Rating: {value.rating}</p>)
+                       key={index}>%{value.rating} {value.keyword} </p>)
         });
         const abcKeywordList = sortedAbcKeywordList.map((value, index) => {
             return (<p onClick={this.getTrend} data-id={value.keyword}
-                       key={index}>{value.keyword} Rating: {value.rating}</p>)
+                       key={index}>{value.keyword}</p>)
         });
         const msgList = messages.map((_, index) => {
             return (
@@ -389,10 +397,16 @@ class App extends Component {
                     </Col>
                 </Row>
                 <Row>
-                    <h3>Unranked keywords</h3>
-                    <p className={"multicolumn-3"}>
-                        {abcKeywordList}
-                    </p>
+                    <Col>
+                        <h3>Unranked keywords</h3>
+                    </Col>
+                </Row>
+                <Row>
+                    <Col>
+                        <p className={"multicolumn-3"}>
+                            {abcKeywordList}
+                        </p>
+                    </Col>
                 </Row>
             </Container>
         )
