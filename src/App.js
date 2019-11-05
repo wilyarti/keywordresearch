@@ -2,6 +2,7 @@ import React, {Component} from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import Container from 'react-bootstrap/Container';
 import Form from 'react-bootstrap/Form';
+import Row from 'react-bootstrap/Row';
 import Col from 'react-bootstrap/Col';
 import Button from 'react-bootstrap/Button';
 import Spinner from 'react-bootstrap/Spinner';
@@ -20,11 +21,12 @@ class App extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            timeout: 1000, //millisecond delay
+            timeout: 100, //millisecond delay
             keyword: "",
             loading: false,
             keywords: [],
             abcKeywords: [],
+            abcKeywordsRating: [],
             msg: '',
             msgs: [],
             config: {
@@ -155,7 +157,7 @@ class App extends Component {
     }
 
     getTrends() {
-        const keywords = this.state.keywords;
+        const keywords = this.state.abcKeywords;
         const getTrends = (thisKeyword) => {
             return new Promise((resolve, reject) => {
                 fetch('/keyword/trends',
@@ -184,39 +186,40 @@ class App extends Component {
                 getTrends(keywords.slice(k, k + 5)).then(trends => {
                     let config = this.state.config;
                     let datasets = [];
-                    let keywordsState = this.state.keywords;
-                    console.log(distinctColors());
+                    let keywordsState = this.state.abcKeywords;
+                    let abcKeywordsRating = this.state.abcKeywordsRating;
                     keywords.slice(k, k + 5).map((value, index) => {
-                        let disabledBoolean = trends.default.averages[index]  ? false : true;
+                        let disabledBoolean = trends.default.averages[index] ? false : true;
                         let keywordIndex = keywordsState.indexOf(value);
-                        let dataset = {
-                            label: value,
-                            borderColor: palette[keywordIndex].hex(),
-                            data: [],
-                            hidden: disabledBoolean
-                        };
-                        datasets.push(dataset);
-                        console.log(index);
-                        // we will be chunking searches up into lots of 5. so index will be non-linear
-                        keywordsState[keywordIndex] = keywordsState[keywordIndex] + " -> %" + trends.default.averages[index] + " rating"
+                        if (!disabledBoolean) {
+                            let dataset = {
+                                label: value,
+                                borderColor: palette[keywordIndex].hex(),
+                                data: [],
+                                hidden: disabledBoolean
+                            };
+                            datasets.push(dataset);
+                        }
+                        abcKeywordsRating.push({
+                            rating: trends.default.averages[index] ? trends.default.averages[index] : 0,
+                            keyword: value
+                        });
                     });
-
-                    console.log(trends);
-                    if (typeof trends.default.timelineData.length === "undefined") {
-                        return
-                    }
                     for (let i = 0, len = trends.default.timelineData.length; i < len; i++) {
                         for (let j = 0, len = trends.default.timelineData[i].value.length; j < len; j++) {
-                            datasets[j].data.push({
-                                x: moment(trends.default.timelineData[i].formattedAxisTime, "MMM DD" ), // "Nov 2 at 10:48 PM" "MMM D hh:mm p"
-                                y: parseFloat(trends.default.timelineData[i].value[j])
-                            });
+                            if (trends.default.averages[j] !== 0) {
+                                datasets[j].data.push({
+                                    x: moment(trends.default.timelineData[i].formattedAxisTime, "MMM DD"), // "Nov 2 at 10:48 PM" "MMM D hh:mm p"
+                                    y: parseFloat(trends.default.timelineData[i].value[j])
+                                });
+                            }
                         }
                     }
                     for (let m = 0; m < datasets.length; m++) {
                         config.datasets.push(datasets[m]);
                     }
-                    this.setState({config})
+                    console.log(abcKeywordsRating);
+                    this.setState({config, abcKeywords: keywordsState, abcKeywordsRating})
                 }).catch((error) => {
                     if (typeof error.err === "undefined") {
                         console.log("No results? We shouldn't be here.")
@@ -224,7 +227,7 @@ class App extends Component {
                         this.setToast("Error", `Rate limited ${keywords[0]}`);
                     }
                 });
-            }.bind(this), (this.state.timeout * k))
+            }.bind(this), (this.state.timeout * (k / 5)))
         }
     }
 
@@ -253,6 +256,7 @@ class App extends Component {
                     maintainAspectRatio: false,
                     datasets: []
                 }
+                //    });
             }, () => this.getTrends());
         });
 
@@ -260,13 +264,24 @@ class App extends Component {
 
     render() {
         const keywords = this.state.keywords;
-        const abcKeywords = this.state.abcKeywords;
+        const abcKeywordsRating = this.state.abcKeywordsRating;
+        // sort by value
+        const sortedAbcKeywordList = abcKeywordsRating.sort(function (a, b) {
+            return b.rating - a.rating;
+        });
         const messages = this.state.msgs;
         const keywordList = keywords.map((_, index) => {
             return (<li onClick={this.getTrend} data-id={keywords[index]} key={index}>{keywords[index]}</li>)
         });
-        const abcKeywordList = abcKeywords.map((_, index) => {
-            return (<li onClick={this.getTrend} data-id={abcKeywords[index]} key={index}>{abcKeywords[index]}</li>)
+
+        const topAbcKeywords = abcKeywordsRating.filter(keyword => keyword.rating > 0);
+        const topKeywordList = topAbcKeywords.map((value, index) => {
+            return (<p onClick={this.getTrend} data-id={value.keyword}
+                       key={index}>{value.keyword} Rating: {value.rating}</p>)
+        });
+        const abcKeywordList = sortedAbcKeywordList.map((value, index) => {
+            return (<p onClick={this.getTrend} data-id={value.keyword}
+                       key={index}>{value.keyword} Rating: {value.rating}</p>)
         });
         const msgList = messages.map((_, index) => {
             return (
@@ -359,29 +374,29 @@ class App extends Component {
                         /> : 'Alphabetic Search'}
                     </Button>
                 </Form>
-                {this.state.keywords.length > 0 && <div><h3>Keyword Suggestions</h3>
-                    <ul>{keywordList}</ul>
-                </div>}
-                <details>
-                    <summary><h3>ABC Keyword Search</h3></summary>
-                    {this.state.abcKeywords.length > 0 && <div>
-                        <ul>{abcKeywordList}</ul>
-                    </div>}
-                </details>
-                <br/>
-
+                <Row>
+                    <Col sm={6}>
+                        {this.state.keywords.length > 0 && <div><h3>Keyword Suggestions</h3>
+                            <ul>{keywordList}</ul>
+                        </div>}
+                        <br/>
+                    </Col>
+                    <Col sm={6}>
+                        <h3>Top Found Keywords</h3>
+                        {this.state.abcKeywords.length > 0 && <p>
+                            {topKeywordList}
+                        </p>}
+                    </Col>
+                </Row>
+                <Row>
+                    <h3>Unranked keywords</h3>
+                    <p className={"multicolumn-3"}>
+                        {abcKeywordList}
+                    </p>
+                </Row>
             </Container>
         )
     }
-}
-
-function getRandomColor() {
-    const letters = '0123456789ABCDEF';
-    let color = '#';
-    for (let i = 0; i < 6; i++) {
-        color += letters[Math.floor(Math.random() * 16)];
-    }
-    return color;
 }
 
 export default App;
