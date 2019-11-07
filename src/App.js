@@ -21,7 +21,7 @@ class App extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            timeout: 500, //millisecond delay
+            timeout: 250, //millisecond delay
             keyword: "",
             loading: false,
             keywords: [],
@@ -99,6 +99,7 @@ class App extends Component {
     getTrend(e) {
         const keyword = e.currentTarget.dataset.id;
         console.log(keyword);
+        this.setState({errors: 0});
         const getTrends = (thisKeyword) => {
             return new Promise((resolve, reject) => {
                 fetch('/keyword/trends',
@@ -235,7 +236,7 @@ class App extends Component {
                         this.setState({errors});
                     }
                 });
-            }.bind(this), (this.state.timeout * (k / 5)))
+            }.bind(this), (this.state.timeout * (k)))
         }
     }
 
@@ -283,11 +284,13 @@ class App extends Component {
         });
 
         const topAbcKeywords = abcKeywordsRating.filter(keyword => keyword.rating > 0);
+        const nonRatedAbcKeywords = abcKeywordsRating.filter(keyword => keyword.rating == 0);
+
         const topKeywordList = topAbcKeywords.map((value, index) => {
             return (<p onClick={this.getTrend} data-id={value.keyword}
                        key={index}>%{value.rating} {value.keyword} </p>)
         });
-        const abcKeywordList = sortedAbcKeywordList.map((value, index) => {
+        const abcKeywordList = nonRatedAbcKeywords.map((value, index) => {
             return (<p onClick={this.getTrend} data-id={value.keyword}
                        key={index}>{value.keyword}</p>)
         });
